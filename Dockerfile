@@ -10,12 +10,14 @@ RUN apt-get update -y && apt-get install -y poppler-utils ttf-mscorefonts-instal
 
 RUN apt-get update -y && apt-get install -y --no-install-recommends \
     git \
+    git-lfs \
     python3.11 \
     python3.11-dev \
     python3.11-distutils \
     ca-certificates \
     build-essential \
     curl \
+    wget \
     unzip
 
 RUN rm -rf /var/lib/apt/lists/* \
@@ -30,6 +32,7 @@ ADD --chmod=755 https://astral.sh/uv/install.sh /install.sh
 RUN /install.sh && rm /install.sh
 
 ENV PYTHONUNBUFFERED=1
+
 WORKDIR /root
 COPY pyproject.toml pyproject.toml
 COPY olmocr/version.py olmocr/version.py
@@ -40,9 +43,7 @@ RUN /root/.local/bin/uv pip install --system --no-cache ".[bench]"
 RUN playwright install-deps
 RUN playwright install chromium
 COPY olmocr olmocr
-
-WORKDIR /root
-COPY olmocr olmocr
+COPY scripts scripts
 
 RUN python3 -m sglang.launch_server --help
 RUN python3 -m olmocr.pipeline --help
