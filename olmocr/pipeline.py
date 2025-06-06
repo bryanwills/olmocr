@@ -106,7 +106,7 @@ class PageResult:
 
 
 async def build_page_query(local_pdf_path: str, page: int, target_longest_image_dim: int, target_anchor_text_len: int, image_rotation: int = 0) -> dict:
-    MAX_TOKENS = 3000
+    MAX_TOKENS = 4500
     assert image_rotation in [0, 90, 180, 270], "Invalid image rotation provided in build_page_query"
 
     # Allow the page rendering to process in the background while we get the anchor text (which blocks the main thread)
@@ -216,7 +216,9 @@ async def apost(url, json_data):
 async def process_page(args, worker_id: int, pdf_orig_path: str, pdf_local_path: str, page_num: int) -> PageResult:
     COMPLETION_URL = f"http://localhost:{SGLANG_SERVER_PORT}/v1/chat/completions"
     MAX_RETRIES = args.max_page_retries
-    TEMPERATURE_BY_ATTEMPT = [0.1, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]
+    TEMPERATURE_BY_ATTEMPT = [0.1, 0.1, 0.2, 0.3, 0.5, 0.8, 0.1, 0.8]
+    FORCE_NO_DOCUMENT_ANCHORING_BY_ATTEMPT = [False, False, False, False, False, False, True, True]
+    assert len(TEMPERATURE_BY_ATTEMPT) == len(FORCE_NO_DOCUMENT_ANCHORING_BY_ATTEMPT)
     exponential_backoffs = 0
     local_anchor_text_len = args.target_anchor_text_len
     local_image_rotation = 0
@@ -224,10 +226,16 @@ async def process_page(args, worker_id: int, pdf_orig_path: str, pdf_local_path:
     await tracker.track_work(worker_id, f"{pdf_orig_path}-{page_num}", "started")
 
     while attempt < MAX_RETRIES:
-        query = await build_page_query(pdf_local_path, page_num, args.target_longest_image_dim, local_anchor_text_len, image_rotation=local_image_rotation)
-        query["temperature"] = TEMPERATURE_BY_ATTEMPT[
-            min(attempt, len(TEMPERATURE_BY_ATTEMPT) - 1)
-        ]  # Change temperature as number of attempts increases to overcome repetition issues at expense of quality
+        lookup_attempt = min(attempt, len(FORCE_NO_DOCUMENT_ANCHORING_BY_ATTEMPT) - 1)
+        query = await build_page_query(
+            pdf_local_path,
+            page_num,
+            args.target_longest_image_dim,
+            local_anchor_text_len if not FORCE_NO_DOCUMENT_ANCHORING_BY_ATTEMPT[lookup_attempt] else -1,
+            image_rotation=local_image_rotation,
+        )
+        # Change temperature as number of attempts increases to overcome repetition issues at expense of quality
+        query["temperature"] = TEMPERATURE_BY_ATTEMPT[lookup_attempt]
 
         logger.info(f"Built page query for {pdf_orig_path}-{page_num}")
 
@@ -288,6 +296,10 @@ async def process_page(args, worker_id: int, pdf_orig_path: str, pdf_local_path:
             raise
         except json.JSONDecodeError as e:
             logger.warning(f"JSON decode error on attempt {attempt} for {pdf_orig_path}-{page_num}: {e}")
+
+            local_anchor_text_len = max(1, local_anchor_text_len // 2)
+            logger.info(f"Reducing anchor text len to {local_anchor_text_len} for {pdf_orig_path}-{page_num}")
+
             attempt += 1
         except ValueError as e:
             logger.warning(f"ValueError on attempt {attempt} for {pdf_orig_path}-{page_num}: {type(e)} - {e}")
@@ -696,19 +708,31 @@ async def sglang_server_ready():
     raise Exception("sglang server did not become ready after waiting.")
 
 
-async def download_model(model_name_or_path: str):
-    if model_name_or_path.startswith("s3://") or model_name_or_path.startswith("gs://") or model_name_or_path.startswith("weka://"):
-        logger.info(f"Downloading model directory from '{model_name_or_path}'")
-        model_cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "olmocr", "model")
-        download_directory([model_name_or_path], model_cache_dir)
-        return model_cache_dir
-    elif os.path.isabs(model_name_or_path) and os.path.isdir(model_name_or_path):
-        logger.info(f"Using local model path at '{model_name_or_path}'")
-        return model_name_or_path
-    else:
-        logger.info(f"Downloading model with hugging face '{model_name_or_path}'")
-        snapshot_download(repo_id=model_name_or_path)
-        return model_name_or_path
+async def download_model(model_name_or_path: str, max_retries: int=5):
+    for retry in range(max_retries):
+        try:
+            if model_name_or_path.startswith("s3://") or model_name_or_path.startswith("gs://") or model_name_or_path.startswith("weka://"):
+                logger.info(f"Downloading model directory from '{model_name_or_path}'")
+                model_cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "olmocr", "model")
+                # Delete existing model cache directory if it exists
+                if os.path.exists(model_cache_dir):
+                    shutil.rmtree(model_cache_dir)
+                download_directory([model_name_or_path], model_cache_dir)
+                return model_cache_dir
+            elif os.path.isabs(model_name_or_path) and os.path.isdir(model_name_or_path):
+                logger.info(f"Using local model path at '{model_name_or_path}'")
+                return model_name_or_path
+            else:
+                logger.info(f"Downloading model with hugging face '{model_name_or_path}'")
+                snapshot_download(repo_id=model_name_or_path)
+                return model_name_or_path
+        except Exception:
+            if retry == max_retries - 1:
+                raise # Raise on final attempt and fail the job
+
+            sleep_time = random.randrange(2, 20) * 2**retry
+            logger.exception(f"Could not download model, sleeping for {sleep_time} seconds to retry ({retry + 1}/{max_retries})")
+            await asyncio.sleep(random.randrange(10, 30) * 2**retry)
 
 
 async def metrics_reporter(work_queue):
@@ -897,6 +921,7 @@ def print_stats(args, root_work_queue):
             logger.warning(f"Error processing {s3_path}: {e}")
             return 0, 0, 0, 0, 0, set(), 0, 0
 
+    print(f"\nCompleted work items {completed_items:,} out of {total_items:,}: {completed_items/total_items*100:.2f}%")
     print("\nProcessing output files...")
     docs_total = 0
     input_tokens_total = 0
@@ -1024,8 +1049,8 @@ async def main():
 
         # Wait a little bit so that not all beaker jobs in a task start at the same time and download the model at the same time
         replica_count = int(os.environ.get("BEAKER_REPLICA_COUNT", "1"))
-        interval = 10 if (replica_count - 1) * 10 <= 240 else 240 / max(1, replica_count - 1)
-        sleep_time = int(int(os.environ.get("BEAKER_REPLICA_RANK", "0")) * interval)
+        interval = 10 if (replica_count - 1) * 10 <= 30 else 30 / max(1, replica_count - 1)
+        sleep_time = int(os.environ.get("BEAKER_REPLICA_RANK", "0")) * interval
         logger.info(f"Beaker job sleeping for {sleep_time} seconds to stagger model downloads")
         await asyncio.sleep(sleep_time)
 
