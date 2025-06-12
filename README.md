@@ -35,6 +35,7 @@ Features:
  - (Based on a 7B parameter VLM, so it requires a GPU)
 
 ### News
+ - May 23, 2025 - v0.1.70 - Official docker support and images are now available! [See Docker usage](#using-docker)
  - May 19, 2025 - v0.1.68 - [olmOCR-Bench](https://github.com/allenai/olmocr/tree/main/olmocr/bench) launch, scoring 77.4. Launch includes 2 point performance boost in olmOCR pipeline due to bug fixes with prompts.
  - Mar 17, 2025 - v0.1.60 - Performance improvements due to better temperature selection in sampling.
  - Feb 25, 2025 - v0.1.58 -  Initial public launch and demo.
@@ -61,18 +62,6 @@ We also ship a comprehensive benchmark suite covering over 7,000 test cases acro
   </thead>
   <tbody>
     <tr>
-      <td align="left">Marker v1.6.2</td>
-      <td align="center">24.3</td>
-      <td align="center">22.1</td>
-      <td align="center">69.8</td>
-      <td align="center">24.3</td>
-      <td align="center">87.1</td>
-      <td align="center">71.0</td>
-      <td align="center">76.9</td>
-      <td align="center"><strong>99.5</strong></td>
-      <td align="center">59.4 ± 1.1</td>
-    </tr>
-    <tr>
       <td align="left">MinerU v1.3.10</td>
       <td align="center">75.4</td>
       <td align="center">47.4</td>
@@ -86,7 +75,7 @@ We also ship a comprehensive benchmark suite covering over 7,000 test cases acro
     </tr>
     <tr>
       <td align="left">Mistral OCR API</td>
-      <td align="center"><strong>77.2</strong></td>
+      <td align="center">77.2</td>
       <td align="center">67.5</td>
       <td align="center">60.6</td>
       <td align="center">29.3</td>
@@ -95,6 +84,18 @@ We also ship a comprehensive benchmark suite covering over 7,000 test cases acro
       <td align="center">77.1</td>
       <td align="center">99.4</td>
       <td align="center">72.0 ± 1.1</td>
+    </tr>
+    <tr>
+      <td align="left">Marker v1.7.4 (hybrid)</td>
+      <td align="center"><strong>77.7</strong></td>
+      <td align="center">71.2</td>
+      <td align="center"><strong>78.1</strong></td>
+      <td align="center">32.3</td>
+      <td align="center">83.4</td>
+      <td align="center">73.8</td>
+      <td align="center">79.0</td>
+      <td align="center">99.2</td>
+      <td align="center">74.3 ± 1.1</td>
     </tr>
     <tr>
       <td align="left">olmOCR v0.1.68 (pipeline.py)</td>
@@ -207,12 +208,12 @@ python -m olmocr.pipeline s3://my_s3_bucket/pdfworkspaces/exampleworkspace --pdf
 
 Pull the Docker image.
 ```bash
-docker pull alleninstituteforai/olmocr:0.1.68
+docker pull alleninstituteforai/olmocr:latest
 ```
 
 To run the container interactively:
 ```bash
-docker run -it --gpus all --name olmocr_container alleninstituteforai/olmocr:0.1.68 /bin/bash
+docker run -it --gpus all --name olmocr_container alleninstituteforai/olmocr:latest /bin/bash
 ```
 
 If you want to access your local files inside the container, use volume mounting:
@@ -220,7 +221,7 @@ If you want to access your local files inside the container, use volume mounting
 docker run -it --gpus all \
   -v /path/to/your/local/files:/local_files \
   --name olmocr_container \
-  alleninstituteforai/olmocr:0.1.68 /bin/bash
+  alleninstituteforai/olmocr:latest /bin/bash
 ```
 
 All dependencies are already installed. Once you’re inside the container, you can run olmOCR commands. For example:
