@@ -254,7 +254,11 @@ def _linearize_pdf_report(report: PageReport, max_length: int = 4000) -> str:
     result = ""
     result += f"Page dimensions: {report.mediabox.x1:.1f}x{report.mediabox.y1:.1f}\n"
 
-    if max_length < 20:
+    if max_length == -1:
+        # Return a basic anchor just saying the whole page is an image
+        result += f"[Image 0x0 to {report.mediabox.x1:.0f}x{report.mediabox.y1:.0f}]\n"
+        return result
+    elif max_length < 20:
         return result
 
     images = _merge_image_elements(report.image_elements)
