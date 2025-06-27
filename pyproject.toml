@@ -5,6 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 # See https://setuptools.pypa.io/en/latest/userguide/quickstart.html for more project configuration options.
 name = "olmocr"
+description = "Fast, efficient, and high quality OCR powered by open visual language models"
 dynamic = ["version"]
 readme = "README.md"
 classifiers = [
@@ -35,8 +36,8 @@ dependencies = [
   "zstandard",
   "boto3",
   "httpx",
-  "torch>=2.5.1",
-  "transformers==4.46.2",
+  "torch>=2.7.0",
+  "transformers>=4.51.1",
   "img2pdf",
   "beaker-py",
 ]
@@ -50,8 +51,7 @@ Changelog = "https://github.com/allenai/olmocr/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 gpu = [
-    "sgl-kernel==0.0.3.post1",
-    "sglang[all]==0.4.2",
+    "vllm==0.9.1"
 ]
 
 dev = [
