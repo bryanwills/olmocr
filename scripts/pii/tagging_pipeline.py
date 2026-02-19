@@ -300,7 +300,7 @@ async def process_file(args, worker_id: int, file_uri: str):
     else:
         file_bytes = raw
 
-    lines = [l for l in file_bytes.decode("utf-8").split("\n") if l]
+    lines = [ln for ln in file_bytes.decode("utf-8").split("\n") if ln]
     page_tasks = {}
 
     # Send all records in parallel, max N queued at a time
